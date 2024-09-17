@@ -27,6 +27,7 @@ let
   common = import ./common.nix;
 
   manpageUrls = pkgs.path + "/doc/manpage-urls.json";
+  redirects = pkgs.path + "/nixos/doc/manual/redirects.json";
 
   # We need to strip references to /nix/store/* from options,
   # including any `extraSources` if some modules came from elsewhere,
@@ -123,6 +124,7 @@ in rec {
       nixos-render-docs -j $NIX_BUILD_CORES manual html \
         --manpage-urls ${manpageUrls} \
         --revision ${escapeShellArg revision} \
+        --redirects ${redirects} \
         --generator "nixos-render-docs ${pkgs.lib.version}" \
         --stylesheet style.css \
         --stylesheet highlightjs/mono-blue.css \

@@ -501,6 +501,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
     _revision: str
     _html_params: HTMLParameters
     _manpage_urls: Mapping[str, str]
+    _redirects: dict[str, list[str]]
     _xref_targets: dict[str, XrefTarget]
     _redirection_targets: set[str]
     _appendix_count: int = 0
@@ -509,9 +510,9 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         self._appendix_count += 1
         return _to_base26(self._appendix_count - 1)
 
-    def __init__(self, revision: str, html_params: HTMLParameters, manpage_urls: Mapping[str, str]):
+    def __init__(self, revision: str, html_params: HTMLParameters, manpage_urls: Mapping[str, str], redirects: dict[str, list[str]]):
         super().__init__()
-        self._revision, self._html_params, self._manpage_urls = revision, html_params, manpage_urls
+        self._revision, self._html_params, self._manpage_urls, self._redirects = revision, html_params, manpage_urls, redirects
         self._xref_targets = {}
         self._redirection_targets = set()
         # renderer not set on purpose since it has a dependency on the output path!
@@ -521,6 +522,26 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
             'book', self._revision, self._html_params, self._manpage_urls, self._xref_targets,
             infile.parent, outfile.parent)
         super().convert(infile, outfile)
+        self._verify_redirects()
+
+    def _verify_redirects(self):
+        input_identifiers = set(self._xref_targets.keys())
+        output_identifiers = set(self._redirects.keys())
+
+        missing_in_output = input_identifiers - output_identifiers
+        missing_in_input = output_identifiers - input_identifiers
+
+        if missing_in_input:
+            raise RuntimeError(f"following identifiers missing in source: {missing_in_input}")
+
+        for input_identifier in missing_in_output:
+            found = False
+            for output_identifier, locations in self._redirects.items():
+                if input_identifier in map(lambda loc: loc.split('#')[-1], locations):
+                    found = True
+                    break
+            if not found:
+                raise RuntimeError(f"identifier '{input_identifier}' not present in redirects")
 
     def _parse(self, src: str, *, auto_id_prefix: None | str = None) -> list[Token]:
         tokens = super()._parse(src,auto_id_prefix=auto_id_prefix)
@@ -676,6 +697,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
 def _build_cli_html(p: argparse.ArgumentParser) -> None:
     p.add_argument('--manpage-urls', required=True)
     p.add_argument('--revision', required=True)
+    p.add_argument('--redirects', type=Path, required=True)
     p.add_argument('--generator', default='nixos-render-docs')
     p.add_argument('--stylesheet', default=[], action='append')
     p.add_argument('--script', default=[], action='append')
@@ -687,12 +709,12 @@ def _build_cli_html(p: argparse.ArgumentParser) -> None:
     p.add_argument('outfile', type=Path)
 
 def _run_cli_html(args: argparse.Namespace) -> None:
-    with open(args.manpage_urls, 'r') as manpage_urls:
+    with open(args.manpage_urls, 'r') as manpage_urls, open(args.redirects, 'r') as redirects:
         md = HTMLConverter(
             args.revision,
             HTMLParameters(args.generator, args.stylesheet, args.script, args.toc_depth,
                            args.chunk_toc_depth, args.section_toc_depth, args.media_dir),
-            json.load(manpage_urls))
+            json.load(manpage_urls), json.load(redirects))
         md.convert(args.infile, args.outfile)
 
 def build_cli(p: argparse.ArgumentParser) -> None:
