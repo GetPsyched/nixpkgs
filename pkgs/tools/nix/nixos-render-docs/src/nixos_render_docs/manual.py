@@ -501,7 +501,6 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
     _revision: str
     _html_params: HTMLParameters
     _manpage_urls: Mapping[str, str]
-    _redirects: dict[str, list[str]]
     _xref_targets: dict[str, XrefTarget]
     _redirection_targets: set[str]
     _appendix_count: int = 0
@@ -510,9 +509,9 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         self._appendix_count += 1
         return _to_base26(self._appendix_count - 1)
 
-    def __init__(self, revision: str, html_params: HTMLParameters, manpage_urls: Mapping[str, str], redirects: dict[str, list[str]]):
+    def __init__(self, revision: str, html_params: HTMLParameters, manpage_urls: Mapping[str, str]):
         super().__init__()
-        self._revision, self._html_params, self._manpage_urls, self._redirects = revision, html_params, manpage_urls, redirects
+        self._revision, self._html_params, self._manpage_urls = revision, html_params, manpage_urls
         self._xref_targets = {}
         self._redirection_targets = set()
         # renderer not set on purpose since it has a dependency on the output path!
@@ -522,43 +521,37 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
             'book', self._revision, self._html_params, self._manpage_urls, self._xref_targets,
             infile.parent, outfile.parent)
         super().convert(infile, outfile)
-        self._verify_redirects()
-        self._flatten_redirects(outfile.parent)
 
-    def _verify_redirects(self):
-        input_identifiers = set(self._xref_targets.keys())
-        output_identifiers = set(self._redirects.keys())
+    def parse_redirects(self, redirects: dict[str, list[str]], outpath: Path):
+        """
+        Parse redirects from an static set of identifier-locations pairs
 
-        missing_in_output = input_identifiers - output_identifiers
-        missing_in_input = output_identifiers - input_identifiers
+        - Ensure semantic correctness of the set of redirects
+        - Flatten redirects into simple key-value pairs for simpler indexing
+        - Segregate client and server side redirects
+        """
+        identifiers_without_redirects = self._xref_targets.keys() - redirects.keys()
+        orphan_identifiers_not_in_source = redirects.keys() - self._xref_targets.keys()
 
-        if missing_in_input:
-            raise RuntimeError(f"following identifiers missing in source: {missing_in_input}")
+        if orphan_identifiers_not_in_source:
+            raise RuntimeError(f"following identifiers missing in source: {orphan_identifiers_not_in_source}")
 
-        for input_identifier in missing_in_output:
+        for input_identifier in identifiers_without_redirects:
             found = False
-            for output_identifier, locations in self._redirects.items():
+            for output_identifier, locations in redirects.items():
                 if input_identifier in map(lambda loc: loc.split('#')[-1], locations):
                     found = True
                     break
             if not found:
                 raise RuntimeError(f"identifier '{input_identifier}' not present in redirects")
 
-    def _flatten_redirects(self, out_path: Path):
-        """
-        Convert the input redirects into a suitable redirects for
-        the client. This output file will be a mapping of each historical
-        location to its new location. This simplifies the processing the client
-        needs to do as well as reduce the file size by removing entries without
-        a redirect.
-        """
         # Filter out key-value pairs that don't have a redirect and add the path to the identifier
-        redirects = {f"{self._xref_targets[identifier].path}#{identifier}": locations for identifier, locations in self._redirects.items() if len(locations) > 0}
+        functional_redirects = {f"{self._xref_targets[identifier].path}#{identifier}": locations for identifier, locations in redirects.items() if len(locations) > 0}
 
         # Flatten the redirects for simpler processing on the client
-        flattened_redirects = {location: identifier for identifier, locations in redirects.items() for location in locations}
+        flattened_redirects = {location: identifier for identifier, locations in functional_redirects.items() for location in locations}
 
-        with open(f"{out_path}/redirects.json", "w") as redirects_file:
+        with open(f"{outpath}/redirects.json", "w") as redirects_file:
             json.dump(flattened_redirects, redirects_file)
 
     def _parse(self, src: str, *, auto_id_prefix: None | str = None) -> list[Token]:
@@ -732,8 +725,9 @@ def _run_cli_html(args: argparse.Namespace) -> None:
             args.revision,
             HTMLParameters(args.generator, args.stylesheet, args.script, args.toc_depth,
                            args.chunk_toc_depth, args.section_toc_depth, args.media_dir),
-            json.load(manpage_urls), json.load(redirects))
+            json.load(manpage_urls))
         md.convert(args.infile, args.outfile)
+        md.parse_redirects(json.load(redirects), args.outfile.parent)
 
 def build_cli(p: argparse.ArgumentParser) -> None:
     formats = p.add_subparsers(dest='format', required=True)
