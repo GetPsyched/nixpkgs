@@ -523,6 +523,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
             infile.parent, outfile.parent)
         super().convert(infile, outfile)
         self._verify_redirects()
+        self._flatten_redirects(outfile.parent)
 
     def _verify_redirects(self):
         input_identifiers = set(self._xref_targets.keys())
@@ -542,6 +543,23 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
                     break
             if not found:
                 raise RuntimeError(f"identifier '{input_identifier}' not present in redirects")
+
+    def _flatten_redirects(self, out_path: Path):
+        """
+        Convert the input redirects into a suitable redirects for
+        the client. This output file will be a mapping of each historical
+        location to its new location. This simplifies the processing the client
+        needs to do as well as reduce the file size by removing entries without
+        a redirect.
+        """
+        # Filter out key-value pairs that don't have a redirect and add the path to the identifier
+        redirects = {f"{self._xref_targets[identifier].path}#{identifier}": locations for identifier, locations in self._redirects.items() if len(locations) > 0}
+
+        # Flatten the redirects for simpler processing on the client
+        flattened_redirects = {location: identifier for identifier, locations in redirects.items() for location in locations}
+
+        with open(f"{out_path}/redirects.json", "w") as redirects_file:
+            json.dump(flattened_redirects, redirects_file)
 
     def _parse(self, src: str, *, auto_id_prefix: None | str = None) -> list[Token]:
         tokens = super()._parse(src,auto_id_prefix=auto_id_prefix)

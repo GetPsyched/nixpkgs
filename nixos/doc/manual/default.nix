@@ -116,6 +116,7 @@ in rec {
       cp ${../../../doc/style.css} $dst/style.css
       cp ${../../../doc/anchor.min.js} $dst/anchor.min.js
       cp ${../../../doc/anchor-use.js} $dst/anchor-use.js
+      cp ${./redirects.js} $dst/redirects.js
 
       cp -r ${pkgs.documentation-highlighter} $dst/highlightjs
 
@@ -132,10 +133,17 @@ in rec {
         --script ./highlightjs/loader.js \
         --script ./anchor.min.js \
         --script ./anchor-use.js \
+        --script ./redirects.js \
         --toc-depth 1 \
         --chunk-toc-depth 1 \
         ./manual.md \
         $dst/${common.indexPath}
+
+      # Inline the JSON content into the redirects file
+      redirectsContent=$(cat $dst/redirects.json)
+      substituteInPlace $dst/redirects.js \
+        --replace-fail 'REDIRECTS_JSON_PLACEHOLDER' "$redirectsContent"
+      rm $dst/redirects.json
 
       mkdir -p $out/nix-support
       echo "nix-build out $out" >> $out/nix-support/hydra-build-products
