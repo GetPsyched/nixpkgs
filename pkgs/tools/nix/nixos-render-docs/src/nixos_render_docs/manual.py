@@ -530,20 +530,23 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         - Flatten redirects into simple key-value pairs for simpler indexing
         - Segregate client and server side redirects
         """
-        identifiers_without_redirects = self._xref_targets.keys() - redirects.keys()
+        initial_identifiers_without_redirects = self._xref_targets.keys() - redirects.keys()
         orphan_identifiers_not_in_source = redirects.keys() - self._xref_targets.keys()
 
         if orphan_identifiers_not_in_source:
             raise RuntimeError(f"following identifiers missing in source: {orphan_identifiers_not_in_source}")
 
-        for input_identifier in identifiers_without_redirects:
+        identifiers_without_redirects = set()
+        for input_identifier in initial_identifiers_without_redirects:
             found = False
             for output_identifier, locations in redirects.items():
                 if input_identifier in map(lambda loc: loc.split('#')[-1], locations):
                     found = True
                     break
             if not found:
-                raise RuntimeError(f"identifier '{input_identifier}' not present in redirects")
+                identifiers_without_redirects.add(input_identifier)
+        if len(identifiers_without_redirects) > 0:
+            raise RuntimeError(f"following identifiers don't have a redirect: {identifiers_without_redirects}")
 
         # Filter out key-value pairs that don't have a redirect and add the path to the identifier
         functional_redirects = {f"{self._xref_targets[identifier].path}#{identifier}": locations for identifier, locations in redirects.items() if len(locations) > 0}
