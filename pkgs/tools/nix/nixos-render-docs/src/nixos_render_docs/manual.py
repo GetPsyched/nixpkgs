@@ -527,6 +527,9 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         Parse redirects from an static set of identifier-locations pairs
 
         - Ensure semantic correctness of the set of redirects
+          - Identifiers not having a redirect entry
+          - Orphan identifiers not present in source
+          - Paths redirecting to different locations
         - Flatten redirects into simple key-value pairs for simpler indexing
         - Segregate client and server side redirects
         """
@@ -548,14 +551,26 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         if len(identifiers_without_redirects) > 0:
             raise RuntimeError(f"following identifiers don't have a redirect: {identifiers_without_redirects}")
 
-        # Filter out key-value pairs that don't have a redirect and add the path to the identifier
-        functional_redirects = {f"{self._xref_targets[identifier].path}#{identifier}": locations for identifier, locations in redirects.items() if len(locations) > 0}
-
-        # Flatten the redirects for simpler processing on the client
-        flattened_redirects = {location: identifier for identifier, locations in functional_redirects.items() for location in locations}
+        client_side_redirects = {}
+        server_side_redirects = {}
+        divergent_redirects = set()
+        for identifier, locations in redirects.items():
+            for location in locations:
+                if '#' in location:
+                    if location not in client_side_redirects:
+                        client_side_redirects[location] = f"{self._xref_targets[identifier].path}#{identifier}"
+                    else:
+                        divergent_redirects.add(location)
+                else:
+                    if location not in server_side_redirects:
+                        server_side_redirects[location] = self._xref_targets[identifier].path
+                    else:
+                        divergent_redirects.add(location)
+        if len(divergent_redirects) > 0:
+            raise RuntimeError(f"following paths redirect to different locations: {divergent_redirects}")
 
         with open(f"{outpath}/redirects.json", "w") as redirects_file:
-            json.dump(flattened_redirects, redirects_file)
+            json.dump(client_side_redirects, redirects_file)
 
     def _parse(self, src: str, *, auto_id_prefix: None | str = None) -> list[Token]:
         tokens = super()._parse(src,auto_id_prefix=auto_id_prefix)

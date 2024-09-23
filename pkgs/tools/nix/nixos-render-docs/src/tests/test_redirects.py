@@ -31,3 +31,7 @@ class TestRedirects(unittest.TestCase):
     def test_orphan_identifier_in_redirects(self):
         with self.assertRaisesRegex(RuntimeError, "^following identifiers missing in source: {'foo'}$"):
             self.md.parse_redirects({'foo': ['index.html#title']}, Path(__file__).parent)
+
+    def test_divergent_redirects(self):
+        with self.assertRaisesRegex(RuntimeError, "^following paths redirect to different locations: {'index.html#foo'}$"):
+            self.md.parse_redirects({'title': ['index.html#foo'], 'subtitle': ['index.html#foo']}, Path(__file__).parent)
