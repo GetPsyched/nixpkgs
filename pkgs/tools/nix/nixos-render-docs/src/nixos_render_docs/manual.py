@@ -530,6 +530,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
           - Identifiers not having a redirect entry
           - Orphan identifiers not present in source
           - Paths redirecting to different locations
+          - Identifiers conflicting with redirect entries
         - Flatten redirects into simple key-value pairs for simpler indexing
         - Segregate client and server side redirects
         """
@@ -554,6 +555,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         client_side_redirects = {}
         server_side_redirects = {}
         divergent_redirects = set()
+        redirect_anchors = set()
         for identifier, locations in redirects.items():
             for location in locations:
                 if '#' in location:
@@ -561,6 +563,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
                         client_side_redirects[location] = f"{self._xref_targets[identifier].path}#{identifier}"
                     else:
                         divergent_redirects.add(location)
+                    redirect_anchors.add(location.split('#')[1])
                 else:
                     if location not in server_side_redirects:
                         server_side_redirects[location] = self._xref_targets[identifier].path
@@ -568,6 +571,8 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
                         divergent_redirects.add(location)
         if len(divergent_redirects) > 0:
             raise RuntimeError(f"following paths redirect to different locations: {divergent_redirects}")
+        if conflicting_anchors := set([anchor for anchor in redirect_anchors if anchor in redirects.keys()]):
+            raise RuntimeError(f"following anchors found that conflict with identifiers: {conflicting_anchors}")
 
         with open(f"{outpath}/redirects.json", "w") as redirects_file:
             json.dump(client_side_redirects, redirects_file)

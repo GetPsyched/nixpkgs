@@ -35,3 +35,7 @@ class TestRedirects(unittest.TestCase):
     def test_divergent_redirects(self):
         with self.assertRaisesRegex(RuntimeError, "^following paths redirect to different locations: {'index.html#foo'}$"):
             self.md.parse_redirects({'title': ['index.html#foo'], 'subtitle': ['index.html#foo']}, Path(__file__).parent)
+
+    def test_conflicting_anchors(self):
+        with self.assertRaisesRegex(RuntimeError, "^following anchors found that conflict with identifiers: {'title'}$"):
+            self.md.parse_redirects({'title': [], 'subtitle': ['index.html#title']}, Path(__file__).parent)
