@@ -531,6 +531,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
           - Orphan identifiers not present in source
           - Paths redirecting to different locations
           - Identifiers conflicting with redirect entries
+          - Client-side redirects to paths having a server-side redirect (transitivity)
         - Flatten redirects into simple key-value pairs for simpler indexing
         - Segregate client and server side redirects
         """
@@ -573,6 +574,16 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
             raise RuntimeError(f"following paths redirect to different locations: {divergent_redirects}")
         if conflicting_anchors := set([anchor for anchor in redirect_anchors if anchor in redirects.keys()]):
             raise RuntimeError(f"following anchors found that conflict with identifiers: {conflicting_anchors}")
+
+        transitive_redirects = {}
+        for server_from, server_to in server_side_redirects.items():
+            for client_from, client_to in client_side_redirects.items():
+                path, anchor = client_from.split('#')
+                if server_from == path:
+                    transitive_redirects[client_from] = f"{server_to}#{anchor}"
+        if len(transitive_redirects) > 0:
+            modifications = "\n\t".join([f"{source} -> {dest}" for source, dest in transitive_redirects.items()])
+            raise RuntimeError(f"following paths have server-side redirects, please modify them to represent their final paths:\n\t{modifications}")
 
         with open(f"{outpath}/redirects.json", "w") as redirects_file:
             json.dump(client_side_redirects, redirects_file)

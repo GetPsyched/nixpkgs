@@ -39,3 +39,7 @@ class TestRedirects(unittest.TestCase):
     def test_conflicting_anchors(self):
         with self.assertRaisesRegex(RuntimeError, "^following anchors found that conflict with identifiers: {'title'}$"):
             self.md.parse_redirects({'title': [], 'subtitle': ['index.html#title']}, Path(__file__).parent)
+
+    def test_transitive_redirects(self):
+        with self.assertRaisesRegex(RuntimeError, "^following paths have server-side redirects, please modify them to represent their final paths:\n\tfoo.html#bar -> index.html#bar$"):
+            self.md.parse_redirects({'title': ["foo.html"], 'subtitle': ['foo.html#bar']}, Path(__file__).parent)
