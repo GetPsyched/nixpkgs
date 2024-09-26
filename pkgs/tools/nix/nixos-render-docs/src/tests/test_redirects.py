@@ -19,9 +19,10 @@ class TestRedirects(unittest.TestCase):
 
     def test_parsing_passes(self):
         try:
-            self.md.parse_redirects({'title': [], 'subtitle': []}, Path(__file__).parent)
+            self.md.parse_redirects({'title': ['index.html'], 'subtitle': ['index.html']}, Path(__file__).parent)
         except Exception as error:
             self.fail(f"redirect parsing failed raised an unexpected exception: {error}")
+
 
     def test_missing_redirect_for_identifier(self):
         with self.assertRaisesRegex(RuntimeError, "^following identifiers don't have a redirect: {'title', 'subtitle'}$"):
@@ -30,16 +31,19 @@ class TestRedirects(unittest.TestCase):
 
     def test_orphan_identifier_in_redirects(self):
         with self.assertRaisesRegex(RuntimeError, "^following identifiers missing in source: {'foo'}$"):
-            self.md.parse_redirects({'foo': ['index.html#title']}, Path(__file__).parent)
+            self.md.parse_redirects({'foo': ['index.html', 'index.html#title']}, Path(__file__).parent)
+
 
     def test_divergent_redirects(self):
         with self.assertRaisesRegex(RuntimeError, "^following paths redirect to different locations: {'index.html#foo'}$"):
-            self.md.parse_redirects({'title': ['index.html#foo'], 'subtitle': ['index.html#foo']}, Path(__file__).parent)
+            self.md.parse_redirects({'title': ['index.html', 'index.html#foo'], 'subtitle': ['index.html', 'index.html#foo']}, Path(__file__).parent)
+
 
     def test_conflicting_anchors(self):
         with self.assertRaisesRegex(RuntimeError, "^following anchors found that conflict with identifiers: {'title'}$"):
-            self.md.parse_redirects({'title': [], 'subtitle': ['index.html#title']}, Path(__file__).parent)
+            self.md.parse_redirects({'title': ['index.html'], 'subtitle': ['index.html', 'index.html#title']}, Path(__file__).parent)
+
 
     def test_transitive_redirects(self):
         with self.assertRaisesRegex(RuntimeError, "^following paths have server-side redirects, please modify them to represent their final paths:\n\tfoo.html#bar -> index.html#bar$"):
-            self.md.parse_redirects({'title': ["foo.html"], 'subtitle': ['foo.html#bar']}, Path(__file__).parent)
+            self.md.parse_redirects({'title': ['index.html', 'foo.html'], 'subtitle': ['index.html', 'foo.html#bar']}, Path(__file__).parent)

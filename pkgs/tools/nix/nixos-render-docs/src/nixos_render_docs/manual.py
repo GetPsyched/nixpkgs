@@ -545,7 +545,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         for input_identifier in initial_identifiers_without_redirects:
             found = False
             for output_identifier, locations in redirects.items():
-                if input_identifier in map(lambda loc: loc.split('#')[-1], locations):
+                if input_identifier in map(lambda loc: loc.split('#')[-1], locations[1:]):
                     found = True
                     break
             if not found:
@@ -558,7 +558,7 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         divergent_redirects = set()
         redirect_anchors = set()
         for identifier, locations in redirects.items():
-            for location in locations:
+            for location in locations[1:]:
                 if '#' in location:
                     if location not in client_side_redirects:
                         client_side_redirects[location] = f"{self._xref_targets[identifier].path}#{identifier}"
