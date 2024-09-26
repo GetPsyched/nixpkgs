@@ -558,6 +558,9 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
         divergent_redirects = set()
         redirect_anchors = set()
         for identifier, locations in redirects.items():
+            if locations[0] != self._xref_targets[identifier].path:
+                raise RuntimeError(f"the first location of '{identifier}' must be its current output path")
+
             for location in locations[1:]:
                 if '#' in location:
                     if location not in client_side_redirects:

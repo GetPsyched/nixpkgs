@@ -34,6 +34,11 @@ class TestRedirects(unittest.TestCase):
             self.md.parse_redirects({'foo': ['index.html', 'index.html#title']}, Path(__file__).parent)
 
 
+    def test_missing_current_output_path(self):
+        with self.assertRaisesRegex(RuntimeError, "^the first location of 'subtitle' must be its current output path$"):
+            self.md.parse_redirects({'title': ['index.html'], 'subtitle': ['foo.html']}, Path(__file__).parent)
+
+
     def test_divergent_redirects(self):
         with self.assertRaisesRegex(RuntimeError, "^following paths redirect to different locations: {'index.html#foo'}$"):
             self.md.parse_redirects({'title': ['index.html', 'index.html#foo'], 'subtitle': ['index.html', 'index.html#foo']}, Path(__file__).parent)
