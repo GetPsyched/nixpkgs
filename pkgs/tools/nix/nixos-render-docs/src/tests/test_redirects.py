@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -14,41 +15,56 @@ class TestRedirects(unittest.TestCase):
 
 ## subtitle {#subtitle}
             """)
-        self.md.convert(Path(__file__).parent / 'index.md', Path(__file__).parent / 'index.html')
 
+    def parse_and_test(self, regex: str, redirects: dict[str, list[str]]):
+        with open(Path(__file__).parent / 'redirects.json', 'w') as infile:
+            json.dump(redirects, infile)
+        with self.assertRaisesRegex(RuntimeError, regex):
+            self.md.convert(Path(__file__).parent / 'index.md', Path(__file__).parent / 'index.html')
 
     def test_parsing_passes(self):
+        with open(Path(__file__).parent / 'redirects.json', 'w') as infile:
+            json.dump({'title': ['index.html'], 'subtitle': ['index.html']}, infile)
         try:
-            self.md.parse_redirects({'title': ['index.html'], 'subtitle': ['index.html']}, Path(__file__).parent)
+            self.md.convert(
+                Path(__file__).parent / 'index.md',
+                Path(__file__).parent / 'index.html',
+            )
         except Exception as error:
             self.fail(f"redirect parsing failed raised an unexpected exception: {error}")
 
-
     def test_missing_redirect_for_identifier(self):
-        with self.assertRaisesRegex(RuntimeError, "^following identifiers don't have a redirect: {'title', 'subtitle'}$"):
-            self.md.parse_redirects({}, Path(__file__).parent)
-
+        self.parse_and_test(
+            "^following identifiers don't have a redirect: {'title', 'subtitle'}$",
+            {}
+        )
 
     def test_orphan_identifier_in_redirects(self):
-        with self.assertRaisesRegex(RuntimeError, "^following identifiers missing in source: {'foo'}$"):
-            self.md.parse_redirects({'foo': ['index.html', 'index.html#title']}, Path(__file__).parent)
-
+        self.parse_and_test(
+            "^following identifiers missing in source: {'foo'}$",
+            {'foo': ['index.html', 'index.html#title']}
+        )
 
     def test_missing_current_output_path(self):
-        with self.assertRaisesRegex(RuntimeError, "^the first location of 'subtitle' must be its current output path$"):
-            self.md.parse_redirects({'title': ['index.html'], 'subtitle': ['foo.html']}, Path(__file__).parent)
-
+        self.parse_and_test(
+            "^the first location of 'subtitle' must be its current output path$",
+            {'title': ['index.html'], 'subtitle': ['foo.html']}
+        )
 
     def test_divergent_redirects(self):
-        with self.assertRaisesRegex(RuntimeError, "^following paths redirect to different locations: {'index.html#foo'}$"):
-            self.md.parse_redirects({'title': ['index.html', 'index.html#foo'], 'subtitle': ['index.html', 'index.html#foo']}, Path(__file__).parent)
-
+        self.parse_and_test(
+            "^following paths redirect to different locations: {'index.html#foo'}$",
+            {'title': ['index.html', 'index.html#foo'], 'subtitle': ['index.html', 'index.html#foo']}
+        )
 
     def test_conflicting_anchors(self):
-        with self.assertRaisesRegex(RuntimeError, "^following anchors found that conflict with identifiers: {'title'}$"):
-            self.md.parse_redirects({'title': ['index.html'], 'subtitle': ['index.html', 'index.html#title']}, Path(__file__).parent)
-
+        self.parse_and_test(
+            "^following anchors found that conflict with identifiers: {'title'}$",
+            {'title': ['index.html'], 'subtitle': ['index.html', 'index.html#title']}
+        )
 
     def test_transitive_redirects(self):
-        with self.assertRaisesRegex(RuntimeError, "^following paths have server-side redirects, please modify them to represent their final paths:\n\tfoo.html#bar -> index.html#bar$"):
-            self.md.parse_redirects({'title': ['index.html', 'foo.html'], 'subtitle': ['index.html', 'foo.html#bar']}, Path(__file__).parent)
+        self.parse_and_test(
+            "^following paths have server-side redirects, please modify them to represent their final paths:\n\tfoo.html#bar -> index.html#bar$",
+            {'title': ['index.html', 'foo.html'], 'subtitle': ['index.html', 'foo.html#bar']}
+        )

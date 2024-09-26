@@ -27,7 +27,6 @@ let
   common = import ./common.nix;
 
   manpageUrls = pkgs.path + "/doc/manpage-urls.json";
-  redirects = pkgs.path + "/nixos/doc/manual/redirects.json";
 
   # We need to strip references to /nix/store/* from options,
   # including any `extraSources` if some modules came from elsewhere,
@@ -104,7 +103,7 @@ in rec {
   # Generate the NixOS manual.
   manualHTML = runCommand "nixos-manual-html"
     { nativeBuildInputs = [ buildPackages.nixos-render-docs ];
-      inputs = sourceFilesBySuffices ./. [ ".md" ];
+      inputs = sourceFilesBySuffices ./. [ ".json" ".md" ];
       meta.description = "The NixOS manual in HTML format";
       allowedReferences = ["out"];
     }
@@ -116,7 +115,6 @@ in rec {
       cp ${../../../doc/style.css} $dst/style.css
       cp ${../../../doc/anchor.min.js} $dst/anchor.min.js
       cp ${../../../doc/anchor-use.js} $dst/anchor-use.js
-      cp ${./redirects.js} $dst/redirects.js
 
       cp -r ${pkgs.documentation-highlighter} $dst/highlightjs
 
@@ -125,7 +123,6 @@ in rec {
       nixos-render-docs -j $NIX_BUILD_CORES manual html \
         --manpage-urls ${manpageUrls} \
         --revision ${escapeShellArg revision} \
-        --redirects ${redirects} \
         --generator "nixos-render-docs ${pkgs.lib.version}" \
         --stylesheet style.css \
         --stylesheet highlightjs/mono-blue.css \
@@ -133,17 +130,10 @@ in rec {
         --script ./highlightjs/loader.js \
         --script ./anchor.min.js \
         --script ./anchor-use.js \
-        --script ./redirects.js \
         --toc-depth 1 \
         --chunk-toc-depth 1 \
         ./manual.md \
         $dst/${common.indexPath}
-
-      # Inline the JSON content into the redirects file
-      redirectsContent=$(cat $dst/redirects.json)
-      substituteInPlace $dst/redirects.js \
-        --replace-fail 'REDIRECTS_JSON_PLACEHOLDER' "$redirectsContent"
-      rm $dst/redirects.json
 
       mkdir -p $out/nix-support
       echo "nix-build out $out" >> $out/nix-support/hydra-build-products

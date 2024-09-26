@@ -35,12 +35,19 @@ class BaseConverter(Converter[md.TR], Generic[md.TR]):
         try:
             tokens = self._parse(infile.read_text())
             self._postprocess(infile, outfile, tokens)
+        except Exception as e:
+            raise RuntimeError(f"failed to render manual {infile}") from e
+        self._validate_raw_redirects(infile.parent / "redirects.json")
+        try:
             converted = self._renderer.render(tokens)
             outfile.write_text(converted)
         except Exception as e:
             raise RuntimeError(f"failed to render manual {infile}") from e
 
     def _postprocess(self, infile: Path, outfile: Path, tokens: Sequence[Token]) -> None:
+        pass
+
+    def _validate_raw_redirects(self, infile: Path) -> None:
         pass
 
     def _handle_headings(self, tokens: list[Token], *, on_heading: Callable[[Token,str],None]) -> None:
@@ -216,6 +223,7 @@ class ManualHTMLRenderer(RendererMixin, HTMLRenderer):
     _base_path: Path
     _in_dir: Path
     _html_params: HTMLParameters
+    _xref_targets: dict[str, XrefTarget]
 
     def __init__(self, toplevel_tag: str, revision: str, html_params: HTMLParameters,
                  manpage_urls: Mapping[str, str], xref_targets: dict[str, XrefTarget],
@@ -224,6 +232,7 @@ class ManualHTMLRenderer(RendererMixin, HTMLRenderer):
         self._in_dir = in_dir
         self._base_path = base_path.absolute()
         self._html_params = html_params
+        self._xref_targets = xref_targets
 
     def _pull_image(self, src: str) -> str:
         src_path = Path(src)
@@ -306,6 +315,23 @@ class ManualHTMLRenderer(RendererMixin, HTMLRenderer):
                 '   <hr />',
                 '  </div>',
             ])
+
+        with open(self._in_dir / "redirects.json") as raw_redirects_file:
+            raw_redirects = json.load(raw_redirects_file)
+        client_redirects = {}
+        for identifier, locations in raw_redirects.items():
+            for location in locations[1:]:
+                if '#' not in location:
+                    continue
+                path, anchor = location.split('#')
+                if path != toc.target.path:
+                    continue
+                client_redirects[anchor] = f"{self._xref_targets[identifier].path}#{identifier}"
+
+        with open(Path(__file__).parent / "redirects.js") as redirects_script_file:
+            redirects_script = redirects_script_file.read()
+        redirects_script = redirects_script.replace('REDIRECTS_PLACEHOLDER', json.dumps(client_redirects))
+
         return "\n".join([
             '<?xml version="1.0" encoding="utf-8" standalone="no"?>',
             '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"',
@@ -318,6 +344,7 @@ class ManualHTMLRenderer(RendererMixin, HTMLRenderer):
                      for style in self._html_params.stylesheets)),
             "".join((f'<script src="{html.escape(script, True)}" type="text/javascript"></script>'
                      for script in self._html_params.scripts)),
+            f'<script type="text/javascript">{redirects_script}</script>',
             f' <meta name="generator" content="{html.escape(self._html_params.generator, True)}" />',
             f' <link rel="home" href="{home.target.href()}" title="{home.target.title}" />' if home.target.href() else "",
             f' {up_link}{prev_link}{next_link}',
@@ -522,75 +549,6 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
             infile.parent, outfile.parent)
         super().convert(infile, outfile)
 
-    def parse_redirects(self, redirects: dict[str, list[str]], outpath: Path):
-        """
-        Parse redirects from an static set of identifier-locations pairs
-
-        - Ensure semantic correctness of the set of redirects
-          - Identifiers not having a redirect entry
-          - Orphan identifiers not present in source
-          - Paths redirecting to different locations
-          - Identifiers conflicting with redirect entries
-          - Client-side redirects to paths having a server-side redirect (transitivity)
-        - Flatten redirects into simple key-value pairs for simpler indexing
-        - Segregate client and server side redirects
-        """
-        initial_identifiers_without_redirects = self._xref_targets.keys() - redirects.keys()
-        orphan_identifiers_not_in_source = redirects.keys() - self._xref_targets.keys()
-
-        if orphan_identifiers_not_in_source:
-            raise RuntimeError(f"following identifiers missing in source: {orphan_identifiers_not_in_source}")
-
-        identifiers_without_redirects = set()
-        for input_identifier in initial_identifiers_without_redirects:
-            found = False
-            for output_identifier, locations in redirects.items():
-                if input_identifier in map(lambda loc: loc.split('#')[-1], locations[1:]):
-                    found = True
-                    break
-            if not found:
-                identifiers_without_redirects.add(input_identifier)
-        if len(identifiers_without_redirects) > 0:
-            raise RuntimeError(f"following identifiers don't have a redirect: {identifiers_without_redirects}")
-
-        client_side_redirects = {}
-        server_side_redirects = {}
-        divergent_redirects = set()
-        redirect_anchors = set()
-        for identifier, locations in redirects.items():
-            if locations[0] != self._xref_targets[identifier].path:
-                raise RuntimeError(f"the first location of '{identifier}' must be its current output path")
-
-            for location in locations[1:]:
-                if '#' in location:
-                    if location not in client_side_redirects:
-                        client_side_redirects[location] = f"{self._xref_targets[identifier].path}#{identifier}"
-                    else:
-                        divergent_redirects.add(location)
-                    redirect_anchors.add(location.split('#')[1])
-                else:
-                    if location not in server_side_redirects:
-                        server_side_redirects[location] = self._xref_targets[identifier].path
-                    else:
-                        divergent_redirects.add(location)
-        if len(divergent_redirects) > 0:
-            raise RuntimeError(f"following paths redirect to different locations: {divergent_redirects}")
-        if conflicting_anchors := set([anchor for anchor in redirect_anchors if anchor in redirects.keys()]):
-            raise RuntimeError(f"following anchors found that conflict with identifiers: {conflicting_anchors}")
-
-        transitive_redirects = {}
-        for server_from, server_to in server_side_redirects.items():
-            for client_from, client_to in client_side_redirects.items():
-                path, anchor = client_from.split('#')
-                if server_from == path:
-                    transitive_redirects[client_from] = f"{server_to}#{anchor}"
-        if len(transitive_redirects) > 0:
-            modifications = "\n\t".join([f"{source} -> {dest}" for source, dest in transitive_redirects.items()])
-            raise RuntimeError(f"following paths have server-side redirects, please modify them to represent their final paths:\n\t{modifications}")
-
-        with open(f"{outpath}/redirects.json", "w") as redirects_file:
-            json.dump(client_side_redirects, redirects_file)
-
     def _parse(self, src: str, *, auto_id_prefix: None | str = None) -> list[Token]:
         tokens = super()._parse(src,auto_id_prefix=auto_id_prefix)
         for token in tokens:
@@ -740,12 +698,79 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
 
         TocEntry.collect_and_link(self._xref_targets, tokens)
 
+    def _validate_raw_redirects(self, infile: Path) -> None:
+        """
+        Parse redirects from an static set of identifier-locations pairs
+
+        - Ensure semantic correctness of the set of redirects
+          - Identifiers not having a redirect entry
+          - Orphan identifiers not present in source
+          - Paths redirecting to different locations
+          - Identifiers conflicting with redirect entries
+          - Client-side redirects to paths having a server-side redirect (transitivity)
+        - Flatten redirects into simple key-value pairs for simpler indexing
+        - Segregate client and server side redirects
+        """
+        with open(infile) as file:
+            redirects = json.load(file)
+
+        initial_identifiers_without_redirects = self._xref_targets.keys() - redirects.keys()
+        orphan_identifiers_not_in_source = redirects.keys() - self._xref_targets.keys()
+
+        if orphan_identifiers_not_in_source:
+            raise RuntimeError(f"following identifiers missing in source: {orphan_identifiers_not_in_source}")
+
+        identifiers_without_redirects = set()
+        for input_identifier in initial_identifiers_without_redirects:
+            found = False
+            for output_identifier, locations in redirects.items():
+                if input_identifier in map(lambda loc: loc.split('#')[-1], locations[1:]):
+                    found = True
+                    break
+            if not found:
+                identifiers_without_redirects.add(input_identifier)
+        if len(identifiers_without_redirects) > 0:
+            raise RuntimeError(f"following identifiers don't have a redirect: {identifiers_without_redirects}")
+
+        client_side_redirects = {}
+        server_side_redirects = {}
+        divergent_redirects = set()
+        redirect_anchors = set()
+        for identifier, locations in redirects.items():
+            if locations[0] != self._xref_targets[identifier].path:
+                raise RuntimeError(f"the first location of '{identifier}' must be its current output path")
+
+            for location in locations[1:]:
+                if '#' in location:
+                    if location not in client_side_redirects:
+                        client_side_redirects[location] = f"{self._xref_targets[identifier].path}#{identifier}"
+                    else:
+                        divergent_redirects.add(location)
+                    redirect_anchors.add(location.split('#')[1])
+                else:
+                    if location not in server_side_redirects:
+                        server_side_redirects[location] = self._xref_targets[identifier].path
+                    else:
+                        divergent_redirects.add(location)
+        if len(divergent_redirects) > 0:
+            raise RuntimeError(f"following paths redirect to different locations: {divergent_redirects}")
+        if conflicting_anchors := set([anchor for anchor in redirect_anchors if anchor in redirects.keys()]):
+            raise RuntimeError(f"following anchors found that conflict with identifiers: {conflicting_anchors}")
+
+        transitive_redirects = {}
+        for server_from, server_to in server_side_redirects.items():
+            for client_from, client_to in client_side_redirects.items():
+                path, anchor = client_from.split('#')
+                if server_from == path:
+                    transitive_redirects[client_from] = f"{server_to}#{anchor}"
+        if len(transitive_redirects) > 0:
+            modifications = "\n\t".join([f"{source} -> {dest}" for source, dest in transitive_redirects.items()])
+            raise RuntimeError(f"following paths have server-side redirects, please modify them to represent their final paths:\n\t{modifications}")
 
 
 def _build_cli_html(p: argparse.ArgumentParser) -> None:
     p.add_argument('--manpage-urls', required=True)
     p.add_argument('--revision', required=True)
-    p.add_argument('--redirects', type=Path, required=True)
     p.add_argument('--generator', default='nixos-render-docs')
     p.add_argument('--stylesheet', default=[], action='append')
     p.add_argument('--script', default=[], action='append')
@@ -757,14 +782,13 @@ def _build_cli_html(p: argparse.ArgumentParser) -> None:
     p.add_argument('outfile', type=Path)
 
 def _run_cli_html(args: argparse.Namespace) -> None:
-    with open(args.manpage_urls, 'r') as manpage_urls, open(args.redirects, 'r') as redirects:
+    with open(args.manpage_urls, 'r') as manpage_urls:
         md = HTMLConverter(
             args.revision,
             HTMLParameters(args.generator, args.stylesheet, args.script, args.toc_depth,
                            args.chunk_toc_depth, args.section_toc_depth, args.media_dir),
             json.load(manpage_urls))
         md.convert(args.infile, args.outfile)
-        md.parse_redirects(json.load(redirects), args.outfile.parent)
 
 def build_cli(p: argparse.ArgumentParser) -> None:
     formats = p.add_subparsers(dest='format', required=True)
