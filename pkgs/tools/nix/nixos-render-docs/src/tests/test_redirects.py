@@ -3,12 +3,11 @@ import unittest
 from pathlib import Path
 
 from nixos_render_docs.manual import HTMLConverter, HTMLParameters
+from nixos_render_docs.redirects import Redirects
 
 
 class TestRedirects(unittest.TestCase):
     def setUp(self):
-        self.md = HTMLConverter("1.0.0", HTMLParameters("", [], [], 2, 2, 2, Path("")), {})
-
         with open(Path(__file__).parent / 'index.md', 'w') as infile:
             infile.write("""
 # title {#title}
@@ -17,16 +16,14 @@ class TestRedirects(unittest.TestCase):
             """)
 
     def parse_and_test(self, regex: str, redirects: dict[str, list[str]]):
-        with open(Path(__file__).parent / 'redirects.json', 'w') as infile:
-            json.dump(redirects, infile)
+        md = HTMLConverter("1.0.0", HTMLParameters("", [], [], 2, 2, 2, Path("")), {}, Redirects(redirects, ''))
         with self.assertRaisesRegex(RuntimeError, regex):
-            self.md.convert(Path(__file__).parent / 'index.md', Path(__file__).parent / 'index.html')
+            md.convert(Path(__file__).parent / 'index.md', Path(__file__).parent / 'index.html')
 
     def test_parsing_passes(self):
-        with open(Path(__file__).parent / 'redirects.json', 'w') as infile:
-            json.dump({'title': ['index.html'], 'subtitle': ['index.html']}, infile)
+        md = HTMLConverter("1.0.0", HTMLParameters("", [], [], 2, 2, 2, Path("")), {}, Redirects({'title': ['index.html'], 'subtitle': ['index.html']}, ''))
         try:
-            self.md.convert(
+            md.convert(
                 Path(__file__).parent / 'index.md',
                 Path(__file__).parent / 'index.html',
             )
