@@ -35,10 +35,7 @@ class BaseConverter(Converter[md.TR], Generic[md.TR]):
         self._current_type = ['book']
         try:
             tokens = self._parse(infile.read_text())
-        except Exception as e:
-            raise RuntimeError(f"failed to render manual {infile}") from e
-        self._postprocess(infile, outfile, tokens)
-        try:
+            self._postprocess(infile, outfile, tokens)
             converted = self._renderer.render(tokens)
             outfile.write_text(converted)
         except Exception as e:
@@ -529,6 +526,8 @@ class HTMLConverter(BaseConverter[ManualHTMLRenderer]):
             'book', self._revision, self._html_params, self._manpage_urls, self._xref_targets,
             self._redirects, infile.parent, outfile.parent)
         super().convert(infile, outfile)
+        if error_report := self._redirects.report_validity():
+            raise RuntimeError(error_report)
 
     def _parse(self, src: str, *, auto_id_prefix: None | str = None) -> list[Token]:
         tokens = super()._parse(src,auto_id_prefix=auto_id_prefix)
