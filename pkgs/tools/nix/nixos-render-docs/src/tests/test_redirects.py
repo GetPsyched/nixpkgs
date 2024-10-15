@@ -11,35 +11,48 @@ class TestRedirects(unittest.TestCase):
     def test_identifier_added(self):
         """
         Test adding a new identifier to the source.
-
-        Expected behaviour:
-        - The redirects JSON should be updated to include the new identifier
-        - The identifier must correspond to a list of which the first element is its current location
-
-        Before:
-        Markdown:
-        # Foo
-        Content for Foo.
-
-        Redirects JSON:
-        {
-            "foo": ["path/to/index.html"]
-        }
-
-        After:
-        Markdown:
-        # Foo
-        Content for Foo.
-
-        # Bar
-        Content for Bar.
-
-        Redirects JSON:
-        {
-            "foo": ["path/to/index.html"],
-            "bar": ["path/to/index.html"]
-        }
         """
+        before = {
+            "filesystem": {
+                "source.md": """
+                    # Foo
+                    Content for Foo.
+                    """,
+                },
+            "redirects": {
+                "foo": ["path/to/index.html"]
+            },
+        }
+        after = {
+            "filesystem": {
+                "source.md": """
+                    # Foo
+                    Content for Foo.
+
+                    # Bar
+                    Content for Bar.
+                    """,
+                },
+            "redirects": {
+                "foo": ["path/to/index.html"]
+            },
+        }
+        output = {
+            "filesystem": {
+                "output.html": """
+                    # Foo
+                    Content for Foo.
+
+                    # Bar
+                    Content for Bar.
+                    """,
+                },
+            "redirects": {
+                "foo": ["path/to/index.html"],
+                "bar": ["path/to/index.html"],
+            },
+        }
+
         xref_targets = {
             "foo": XrefTarget(id="foo", title_html="Foo", toc_html="Foo", title="Foo", path="path/to/index.html"),
             "bar": XrefTarget(id="bar", title_html="Bar", toc_html="Bar", title="Bar", path="path/to/index.html"),
