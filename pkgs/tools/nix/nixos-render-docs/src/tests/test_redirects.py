@@ -21,9 +21,6 @@ class TestRedirects(unittest.TestCase):
         # Foo
         Content for Foo.
 
-        # Bar
-        Content for Bar.
-
         Redirects JSON:
         {
             "foo": ["path/to/index.html"]
@@ -44,8 +41,8 @@ class TestRedirects(unittest.TestCase):
         }
         """
         xref_targets = {
-            "foo": XrefTarget("foo", "Foo", "Foo", "Foo", "path/to/index.html"),
-            "bar": XrefTarget("bar", "Bar", "Bar", "Bar", "path/to/index.html"),
+            "foo": XrefTarget(id="foo", title_html="Foo", toc_html="Foo", title="Foo", path="path/to/index.html"),
+            "bar": XrefTarget(id="bar", title_html="Bar", toc_html="Bar", title="Bar", path="path/to/index.html"),
         }
 
         # Case 1: Violated expected behaviour
