@@ -90,26 +90,31 @@ class Redirects:
                 if server_from == path:
                     self.transitive_redirects[client_from] = f"{server_to}#{anchor}"
 
-    def report_validity(self) -> str:
-        errors = []
-        if self.orphan_identifiers:
-            errors.append(f"Following identifiers missing in source: {self.orphan_identifiers}")
-        if self.identifiers_without_redirects:
-            errors.append(f"Following identifiers don't have a redirect: {self.identifiers_without_redirects}")
-        if self.identifiers_missing_current_outpath:
-            errors.append(f"Following identifiers don't have their current out path set or is invalid: {self.identifiers_missing_current_outpath}")
-        if self.divergent_redirects:
-            errors.append(f"Following paths redirect to different locations: {self.divergent_redirects}")
-        if self.conflicting_anchors:
-            errors.append(f"Following anchors found that conflict with identifiers: {self.conflicting_anchors}")
-        if self.transitive_redirects:
-            modifications = "\n\t".join([f"{source} -> {dest}" for source, dest in self.transitive_redirects.items()])
-            errors.append(f"Following paths have server-side redirects, please modify them to represent their final paths:\n\t{modifications}")
-        return "\n".join(errors)
+        if self._is_invalid():
+            raise InvalidRedirects(self)
+
+    class InvalidRedirects(Exception):
+        def __str__(self) -> str:
+            # TODO: figure out passing the error analysis
+            errors = []
+            if self.orphan_identifiers:
+                errors.append(f"Following identifiers missing in source: {self.orphan_identifiers}")
+            if self.identifiers_without_redirects:
+                errors.append(f"Following identifiers don't have a redirect: {self.identifiers_without_redirects}")
+            if self.identifiers_missing_current_outpath:
+                errors.append(f"Following identifiers don't have their current out path set or is invalid: {self.identifiers_missing_current_outpath}")
+            if self.divergent_redirects:
+                errors.append(f"Following paths redirect to different locations: {self.divergent_redirects}")
+            if self.conflicting_anchors:
+                errors.append(f"Following anchors found that conflict with identifiers: {self.conflicting_anchors}")
+            if self.transitive_redirects:
+                modifications = "\n\t".join([f"{source} -> {dest}" for source, dest in self.transitive_redirects.items()])
+                errors.append(f"Following paths have server-side redirects, please modify them to represent their final paths:\n\t{modifications}")
+            return "\n".join(errors)
 
     @property
     def _is_invalid(self) -> bool:
-        return bool(self.report_validity())
+        return bool(self.__str__())
 
     @require_validation
     def get_client_redirects(self, redirection_target: str):
