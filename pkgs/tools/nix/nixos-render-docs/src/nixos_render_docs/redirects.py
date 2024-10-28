@@ -111,7 +111,6 @@ class Redirects:
     def _is_invalid(self) -> bool:
         return bool(self.report_validity())
 
-    @require_validation
     def get_client_redirects(self, redirection_target: str):
         client_redirects = {}
         for identifier, locations in self._raw_redirects.items():
