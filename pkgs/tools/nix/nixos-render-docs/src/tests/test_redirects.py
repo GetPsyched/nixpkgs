@@ -28,18 +28,16 @@ foo.md
 
     def test_identifier_added(self):
         """Test adding a new identifier to the source."""
-        # Before
-        redirects = self.setup_boilerplate("""
+        before = self.setup_boilerplate("""
 # Foo {#foo}
             """,
             {
                 "foo": ["index.html"],
             },
         )
-        self.assertEqual(redirects.report_validity(), '')
+        self.assertEqual(before.report_validity(), '')
 
-        # After
-        redirects = self.setup_boilerplate(
+        after = self.setup_boilerplate(
             """
 # Foo {#foo}
 
@@ -50,12 +48,11 @@ foo.md
                 "bar": ["index.html"],
             },
         )
-        self.assertEqual(redirects.report_validity(), '')
+        self.assertEqual(after.report_validity(), '')
 
     def test_identifier_removed(self):
         """Test removing an identifier from the source."""
-        # Before
-        redirects = self.setup_boilerplate("""
+        before = self.setup_boilerplate("""
 # Foo {#foo}
 
 ## Bar {#bar}
@@ -65,22 +62,20 @@ foo.md
                 "bar": ["index.html"],
             },
         )
-        self.assertEqual(redirects.report_validity(), '')
+        self.assertEqual(before.report_validity(), '')
 
-        # After
-        redirects = self.setup_boilerplate("""
+        after = self.setup_boilerplate("""
 # Foo {#foo}
             """,
             {
                 "foo": ["index.html"],
             },
         )
-        self.assertEqual(redirects.report_validity(), '')
+        self.assertEqual(after.report_validity(), '')
 
     def test_identifier_renamed(self):
         """Test renaming an identifier in the source."""
-        # Before
-        redirects = self.setup_boilerplate("""
+        before = self.setup_boilerplate("""
 # Foo {#foo}
 
 ## Bar {#bar}
@@ -90,10 +85,9 @@ foo.md
                 "bar": ["index.html"],
             },
         )
-        self.assertEqual(redirects.report_validity(), '')
+        self.assertEqual(before.report_validity(), '')
 
-        # After
-        redirects = self.setup_boilerplate("""
+        after = self.setup_boilerplate("""
 # Foo Prime {#foo-prime}
 
 ## Bar {#bar}
@@ -103,4 +97,4 @@ foo.md
                 "bar": ["index.html"],
             },
         )
-        self.assertEqual(redirects.report_validity(), '')
+        self.assertEqual(after.report_validity(), '')
