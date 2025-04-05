@@ -343,6 +343,22 @@ rec {
   */
   mkPackageOptionMD = lib.warn "mkPackageOptionMD is deprecated and will be removed in 25.05; please use mkPackageOption." mkPackageOption;
 
+  mkConfigOption =
+    { format, ... }@attrs:
+    mkOption (
+      {
+        apply = value: { raw = value; text = ""; source = format.generate "foo" value;};
+        default = { };
+        type = format.type;
+      }
+      // lib.removeAttrs attrs [
+        "apply"
+        "default"
+        "format"
+        "type"
+      ]
+    );
+
   /**
     This option accepts arbitrary definitions, but it does not produce an option value.
 

@@ -7,8 +7,6 @@
 
 let
   cfg = config.programs.lazygit;
-
-  settingsFormat = pkgs.formats.yaml { };
 in
 {
   options.programs.lazygit = {
@@ -16,9 +14,8 @@ in
 
     package = lib.mkPackageOption pkgs "lazygit" { };
 
-    settings = lib.mkOption {
-      inherit (settingsFormat) type;
-      default = { };
+    settings = lib.options.mkConfigOption {
+      format = pkgs.formats.yaml { };
       description = ''
         Lazygit configuration.
 
@@ -30,8 +27,9 @@ in
   config = lib.mkIf cfg.enable {
     environment = {
       systemPackages = [ cfg.package ];
-      etc = lib.mkIf (cfg.settings != { }) {
-        "xdg/lazygit/config.yml".source = settingsFormat.generate "lazygit-config.yml" cfg.settings;
+      etc = lib.mkIf (cfg.settings.raw != { }) {
+        "xdg/lazygit/config.yml".source = cfg.settings.source;
+        "xdg/lazygit/config2.yml".text = cfg.settings.source.text;
       };
     };
   };
